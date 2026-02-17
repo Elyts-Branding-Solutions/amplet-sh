@@ -1,10 +1,14 @@
 #!/bin/sh
-# Install amplet from GitHub Releases. Usage: curl -fsSL https://raw.githubusercontent.com/Elyts-Branding-Solutions/amplet-sh/main/install.sh | sh
+# Install amplet from GitHub Releases.
+# Usage (no token): curl -fsSL https://raw.githubusercontent.com/Elyts-Branding-Solutions/amplet-sh/main/install.sh | sh
+# Usage (with token): curl -fsSL https://raw.githubusercontent.com/Elyts-Branding-Solutions/amplet-sh/main/install.sh | sh -s YOUR_TOKEN
 
 set -e
 REPO="Elyts-Branding-Solutions/amplet-sh"
+BASE_URL="https://expenses-participate-sys-das.trycloudflare.com"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
+REGISTER_TOKEN="${1:-}"
 
 # Detect OS and arch for release asset name
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -35,3 +39,8 @@ chmod +x "$BINARY"
 sudo mv "$BINARY" "$INSTALL_DIR/"
 echo "Installed: $INSTALL_DIR/$BINARY"
 "$INSTALL_DIR/$BINARY" ping 2>/dev/null || true
+if [ -n "$REGISTER_TOKEN" ]; then
+  curl -sS -o /dev/null -X POST "${BASE_URL}/api/register" \
+    -H "Content-Type: application/json" \
+    -d "{\"token\":\"$REGISTER_TOKEN\"}" 2>/dev/null || true
+fi
