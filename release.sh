@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build, tag, and publish a release (Linux + macOS binaries).
+# Build, tag, and publish a release (Linux only).
 # Usage: ./release.sh [VERSION]
 #   No arg: auto-increment patch (v1.0.0 -> v1.0.1)
 #   patch | minor | major: increment that part
@@ -47,10 +47,9 @@ case "$VERSION" in
     ;;
 esac
 
-echo "==> Building binaries"
+echo "==> Building Linux binaries"
 GOOS=linux GOARCH=amd64 go build -o amplet-linux-amd64 .
-GOOS=darwin GOARCH=amd64 go build -o amplet-darwin-amd64 .
-GOOS=darwin GOARCH=arm64 go build -o amplet-darwin-arm64 .
+GOOS=linux GOARCH=arm64 go build -o amplet-linux-arm64 .
 
 echo "==> Tagging $TAG"
 git tag -a "$TAG" -m "Release $TAG"
@@ -61,6 +60,6 @@ gh release create "$TAG" \
   --repo "$REPO" \
   --title "Release $TAG" \
   --notes "Install: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh" \
-  amplet-linux-amd64 amplet-darwin-amd64 amplet-darwin-arm64
+  amplet-linux-amd64 amplet-linux-arm64
 
 echo "==> Done. Install: curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh"
