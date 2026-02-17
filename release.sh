@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build, tag, and publish a release with the Linux binary.
+# Build, tag, and publish a release (Linux + macOS binaries).
 # Usage: ./release.sh [VERSION]
 #   No arg: auto-increment patch (v1.0.0 -> v1.0.1)
 #   patch | minor | major: increment that part
@@ -8,7 +8,6 @@
 
 set -e
 REPO="Elyts-Branding-Solutions/amplet-sh"
-ASSET="amplet-linux-amd64"
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "Need GitHub CLI (gh). Install: https://cli.github.com/"
@@ -48,8 +47,10 @@ case "$VERSION" in
     ;;
 esac
 
-echo "==> Building $ASSET"
-GOOS=linux GOARCH=amd64 go build -o "$ASSET" .
+echo "==> Building binaries"
+GOOS=linux GOARCH=amd64 go build -o amplet-linux-amd64 .
+GOOS=darwin GOARCH=amd64 go build -o amplet-darwin-amd64 .
+GOOS=darwin GOARCH=arm64 go build -o amplet-darwin-arm64 .
 
 echo "==> Tagging $TAG"
 git tag -a "$TAG" -m "Release $TAG"
@@ -59,7 +60,7 @@ git push origin "$TAG"
 gh release create "$TAG" \
   --repo "$REPO" \
   --title "Release $TAG" \
-  --notes "Install with: curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh" \
-  "./$ASSET"
+  --notes "Install: curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh" \
+  amplet-linux-amd64 amplet-darwin-amd64 amplet-darwin-arm64
 
 echo "==> Done. Install: curl -sSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh"

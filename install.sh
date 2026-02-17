@@ -22,9 +22,14 @@ fi
 
 echo "Installing amplet to $INSTALL_DIR"
 URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
-if ! curl -sfSL -o "$BINARY" "$URL" 2>/dev/null && [ -n "$ASSET_ALT" ]; then
+if ! curl -sfSL -o "$BINARY" "$URL" 2>/dev/null && [ -n "${ASSET_ALT:-}" ]; then
   URL="https://github.com/${REPO}/releases/latest/download/${ASSET_ALT}"
   curl -sfSL -o "$BINARY" "$URL"
+fi
+if [ ! -f "$BINARY" ] || [ ! -s "$BINARY" ]; then
+  echo "No release binary for $OS/$ARCH."
+  echo "On macOS, install from source: git clone https://github.com/${REPO}.git && cd amplet-sh && make build && sudo make install"
+  exit 1
 fi
 chmod +x "$BINARY"
 sudo mv "$BINARY" "$INSTALL_DIR/"

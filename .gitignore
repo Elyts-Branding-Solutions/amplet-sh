@@ -1,6 +1,8 @@
 # Binaries
 amplet
 amplet-linux-amd64
+amplet-darwin-amd64
+amplet-darwin-arm64
 
 # Go
 *.exe
