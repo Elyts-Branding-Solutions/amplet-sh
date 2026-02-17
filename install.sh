@@ -1,0 +1,32 @@
+#!/bin/sh
+# Install amplet from GitHub Releases. Usage: curl -fsSL https://raw.githubusercontent.com/Elyts-Branding-Solutions/amplet-sh/main/install.sh | sh
+
+set -e
+REPO="Elyts-Branding-Solutions/amplet-sh"
+INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+BINARY="amplet"
+
+# Detect OS and arch for release asset name
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64) ARCH="amd64" ;;
+  aarch64|arm64) ARCH="arm64" ;;
+esac
+ASSET="amplet-${OS}-${ARCH}"
+
+# Fallback: generic linux binary (many repos ship only amplet-linux-amd64)
+if [ "$OS" = "linux" ] && [ "$ARCH" != "amd64" ]; then
+  ASSET_ALT="amplet-linux-amd64"
+fi
+
+echo "Installing amplet to $INSTALL_DIR"
+URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
+if ! curl -sfSL -o "$BINARY" "$URL" 2>/dev/null && [ -n "$ASSET_ALT" ]; then
+  URL="https://github.com/${REPO}/releases/latest/download/${ASSET_ALT}"
+  curl -sfSL -o "$BINARY" "$URL"
+fi
+chmod +x "$BINARY"
+sudo mv "$BINARY" "$INSTALL_DIR/"
+echo "Installed: $INSTALL_DIR/$BINARY"
+"$INSTALL_DIR/$BINARY" ping 2>/dev/null || true
