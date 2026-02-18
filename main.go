@@ -17,7 +17,7 @@ func main() {
 
 	switch os.Args[1] {
 	case "ping":
-		fmt.Println("pong")
+		fmt.Println("pong!")
 	case "hello":
 		fmt.Println("Hello from amplet 🚀")
 	case "run":
