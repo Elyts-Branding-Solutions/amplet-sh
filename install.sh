@@ -89,8 +89,11 @@ if [ -n "$REGISTER_TOKEN" ]; then
   fi
   [ -z "$os_name" ] && os_name=$(_trim "$(lsb_release -ds 2>/dev/null)")
   [ -z "$os_name" ] && os_name="Linux (unknown version)"
-  storage=$(df -h / 2>/dev/null | awk 'NR==2 {gsub(/[^0-9.]/,"",$2); print $2 " GB"}')
-  [ -z "$storage" ] && storage="Unknown"
+  storage_total_gb=$(df -BG / 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$2); print $2+0}')
+  storage_used_gb=$(df -BG / 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$3); print $3+0}')
+  [ -z "$storage_total_gb" ] && storage_total_gb="0"
+  [ -z "$storage_used_gb" ] && storage_used_gb="0"
+  storage="${storage_total_gb} GB"
   gpuVram="N/A"
   gpuCount="0"
   if command -v nvidia-smi >/dev/null 2>&1; then
@@ -102,12 +105,47 @@ if [ -n "$REGISTER_TOKEN" ]; then
       [ "$vram_mb" -ge 1024 ] 2>/dev/null && gpuVram="$((vram_mb / 1024)) GB"
     fi
   fi
+
+  # Storage model (primary disk)
+  storage_model=$(_trim "$(lsblk -d -o MODEL 2>/dev/null | awk 'NR>1 && $0!="" {print; exit}')")
+  [ -z "$storage_model" ] && storage_model="Unknown"
+
+  # Motherboard manufacturer and model
+  mb_manufacturer="Unknown"
+  mb_model="Unknown"
+  if command -v dmidecode >/dev/null 2>&1; then
+    mb_manufacturer=$(_trim "$(dmidecode -t baseboard 2>/dev/null | grep -m1 'Manufacturer:' | sed 's/.*Manufacturer:[[:space:]]*//')")
+    mb_model=$(_trim "$(dmidecode -t baseboard 2>/dev/null | grep -m1 'Product Name:' | sed 's/.*Product Name:[[:space:]]*//')")
+  fi
+  [ -z "$mb_manufacturer" ] && mb_manufacturer="Unknown"
+  [ -z "$mb_model" ] && mb_model="Unknown"
+
+  # Network: public IP
+  public_ip=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null)
+  [ -z "$public_ip" ] && public_ip=$(curl -s --connect-timeout 5 api.ipify.org 2>/dev/null)
+  [ -z "$public_ip" ] && public_ip="Unknown"
+
+  # Network: primary interface link speed (Mbps)
+  net_iface=$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')
+  net_speed_mbps="0"
+  if [ -n "$net_iface" ] && [ -f "/sys/class/net/$net_iface/speed" ]; then
+    net_speed_mbps=$(cat "/sys/class/net/$net_iface/speed" 2>/dev/null || echo "0")
+    [ "$net_speed_mbps" -lt 0 ] 2>/dev/null && net_speed_mbps="0"
+  fi
+
+  # Network: number of listening ports
+  open_ports=$(ss -tuln 2>/dev/null | grep -c LISTEN || netstat -tuln 2>/dev/null | grep -c LISTEN || echo "0")
+
   cpuTypeEsc=$(_json_esc "$cpuType")
   osEsc=$(_json_esc "$os_name")
   ramEsc=$(_json_esc "$ram")
   storageEsc=$(_json_esc "$storage")
   gpuVramEsc=$(_json_esc "$gpuVram")
-  payload="{\"token\":\"$REGISTER_TOKEN\",\"cpuType\":\"$cpuTypeEsc\",\"core\":$core,\"threads\":$threads,\"ram\":\"$ramEsc\",\"os\":\"$osEsc\",\"storage\":\"$storageEsc\",\"gpuVram\":\"$gpuVramEsc\",\"gpuCount\":$gpuCount}"
+  storageModelEsc=$(_json_esc "$storage_model")
+  mbManufacturerEsc=$(_json_esc "$mb_manufacturer")
+  mbModelEsc=$(_json_esc "$mb_model")
+  publicIpEsc=$(_json_esc "$public_ip")
+  payload="{\"token\":\"$REGISTER_TOKEN\",\"cpuType\":\"$cpuTypeEsc\",\"core\":$core,\"threads\":$threads,\"ram\":\"$ramEsc\",\"os\":\"$osEsc\",\"storage\":\"$storageEsc\",\"storageTotalGB\":$storage_total_gb,\"storageUsedGB\":$storage_used_gb,\"storageModel\":\"$storageModelEsc\",\"gpuVram\":\"$gpuVramEsc\",\"gpuCount\":$gpuCount,\"mbManufacturer\":\"$mbManufacturerEsc\",\"mbModel\":\"$mbModelEsc\",\"publicIp\":\"$publicIpEsc\",\"netSpeedMbps\":$net_speed_mbps,\"openPorts\":$open_ports}"
   curl -sS -o /dev/null -X POST "${BASE_URL}/api/captured-config" \
     -H "Content-Type: application/json" \
     -d "$payload" 2>/dev/null || true
