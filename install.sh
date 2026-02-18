@@ -94,8 +94,13 @@ if [ -n "$REGISTER_TOKEN" ]; then
   [ -z "$storage_total_gb" ] && storage_total_gb="0"
   [ -z "$storage_used_gb" ] && storage_used_gb="0"
   storage="${storage_total_gb} GB"
+  # GPU details
   gpuVram="N/A"
   gpuCount="0"
+  gpuName="not installed"
+  gpuManufacturer="not installed"
+  gpuDriverVersion="not installed"
+  cudaVersion="not installed"
   if command -v nvidia-smi >/dev/null 2>&1; then
     gpuCount=$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')
     [ -z "$gpuCount" ] && gpuCount="0"
@@ -104,11 +109,34 @@ if [ -n "$REGISTER_TOKEN" ]; then
       gpuVram="$vram_mb MB"
       [ "$vram_mb" -ge 1024 ] 2>/dev/null && gpuVram="$((vram_mb / 1024)) GB"
     fi
+    gpuName=$(_trim "$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)")
+    [ -z "$gpuName" ] && gpuName="Unknown"
+    gpuDriverVersion=$(_trim "$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)")
+    [ -z "$gpuDriverVersion" ] && gpuDriverVersion="Unknown"
+    # CUDA version from nvidia-smi header line
+    cudaVersion=$(_trim "$(nvidia-smi 2>/dev/null | grep -o 'CUDA Version: [0-9.]*' | head -1 | sed 's/CUDA Version: //')")
+    # Fallback: nvcc
+    [ -z "$cudaVersion" ] && cudaVersion=$(_trim "$(nvcc --version 2>/dev/null | grep -o 'release [0-9.]*' | head -1 | sed 's/release //')")
+    [ -z "$cudaVersion" ] && cudaVersion="not installed"
+    # Manufacturer from GPU name prefix
+    case "$gpuName" in
+      NVIDIA*|GeForce*|Quadro*|Tesla*) gpuManufacturer="NVIDIA" ;;
+      AMD*|Radeon*) gpuManufacturer="AMD" ;;
+      Intel*) gpuManufacturer="Intel" ;;
+      *) gpuManufacturer="NVIDIA" ;;
+    esac
   fi
 
-  # Storage model (primary disk)
+  # Storage model and vendor (primary disk)
   storage_model=$(_trim "$(lsblk -d -o MODEL 2>/dev/null | awk 'NR>1 && $0!="" {print; exit}')")
   [ -z "$storage_model" ] && storage_model="Unknown"
+  storage_vendor=$(_trim "$(lsblk -d -o VENDOR 2>/dev/null | awk 'NR>1 && $0!="" {print; exit}')")
+  if [ -z "$storage_vendor" ] || [ "$storage_vendor" = "Unknown" ]; then
+    root_dev=$(df / 2>/dev/null | awk 'NR==2 {gsub(/[0-9]*$/,"",$1); gsub(/p$/,"",$1); print $1}')
+    root_disk=$(basename "$root_dev" 2>/dev/null)
+    storage_vendor=$(_trim "$(cat /sys/class/block/$root_disk/device/vendor 2>/dev/null)")
+  fi
+  [ -z "$storage_vendor" ] && storage_vendor="Unknown"
 
   # Motherboard manufacturer and model
   mb_manufacturer="Unknown"
@@ -133,6 +161,20 @@ if [ -n "$REGISTER_TOKEN" ]; then
     [ "$net_speed_mbps" -lt 0 ] 2>/dev/null && net_speed_mbps="0"
   fi
 
+  # Network: measured download and upload speed (Mbps) via Cloudflare
+  echo "Measuring network speed..."
+  dl_bps=$(curl -o /dev/null -s -w "%{speed_download}" --connect-timeout 10 --max-time 15 \
+    "https://speed.cloudflare.com/__down?bytes=10000000" 2>/dev/null || echo "0")
+  net_download_mbps=$(echo "$dl_bps" | awk '{printf "%.1f", $1*8/1000000}')
+  [ -z "$net_download_mbps" ] && net_download_mbps="0"
+  ul_tmp=$(mktemp 2>/dev/null || echo "/tmp/amplet_ul_$$")
+  dd if=/dev/urandom of="$ul_tmp" bs=1M count=5 2>/dev/null
+  ul_bps=$(curl -o /dev/null -s -w "%{speed_upload}" --connect-timeout 10 --max-time 20 \
+    -X POST "https://speed.cloudflare.com/__up" -T "$ul_tmp" 2>/dev/null || echo "0")
+  rm -f "$ul_tmp"
+  net_upload_mbps=$(echo "$ul_bps" | awk '{printf "%.1f", $1*8/1000000}')
+  [ -z "$net_upload_mbps" ] && net_upload_mbps="0"
+
   # Network: number of listening ports
   open_ports=$(ss -tuln 2>/dev/null | grep -c LISTEN || netstat -tuln 2>/dev/null | grep -c LISTEN || echo "0")
 
@@ -141,11 +183,16 @@ if [ -n "$REGISTER_TOKEN" ]; then
   ramEsc=$(_json_esc "$ram")
   storageEsc=$(_json_esc "$storage")
   gpuVramEsc=$(_json_esc "$gpuVram")
+  gpuNameEsc=$(_json_esc "$gpuName")
+  gpuManufacturerEsc=$(_json_esc "$gpuManufacturer")
+  gpuDriverVersionEsc=$(_json_esc "$gpuDriverVersion")
+  cudaVersionEsc=$(_json_esc "$cudaVersion")
   storageModelEsc=$(_json_esc "$storage_model")
+  storageVendorEsc=$(_json_esc "$storage_vendor")
   mbManufacturerEsc=$(_json_esc "$mb_manufacturer")
   mbModelEsc=$(_json_esc "$mb_model")
   publicIpEsc=$(_json_esc "$public_ip")
-  payload="{\"token\":\"$REGISTER_TOKEN\",\"cpuType\":\"$cpuTypeEsc\",\"core\":$core,\"threads\":$threads,\"ram\":\"$ramEsc\",\"os\":\"$osEsc\",\"storage\":\"$storageEsc\",\"storageTotalGB\":$storage_total_gb,\"storageUsedGB\":$storage_used_gb,\"storageModel\":\"$storageModelEsc\",\"gpuVram\":\"$gpuVramEsc\",\"gpuCount\":$gpuCount,\"mbManufacturer\":\"$mbManufacturerEsc\",\"mbModel\":\"$mbModelEsc\",\"publicIp\":\"$publicIpEsc\",\"netSpeedMbps\":$net_speed_mbps,\"openPorts\":$open_ports}"
+  payload="{\"token\":\"$REGISTER_TOKEN\",\"cpuType\":\"$cpuTypeEsc\",\"core\":$core,\"threads\":$threads,\"ram\":\"$ramEsc\",\"os\":\"$osEsc\",\"storage\":\"$storageEsc\",\"storageTotalGB\":$storage_total_gb,\"storageUsedGB\":$storage_used_gb,\"storageModel\":\"$storageModelEsc\",\"storageVendor\":\"$storageVendorEsc\",\"gpuVram\":\"$gpuVramEsc\",\"gpuCount\":$gpuCount,\"gpuName\":\"$gpuNameEsc\",\"gpuManufacturer\":\"$gpuManufacturerEsc\",\"gpuDriverVersion\":\"$gpuDriverVersionEsc\",\"cudaVersion\":\"$cudaVersionEsc\",\"mbManufacturer\":\"$mbManufacturerEsc\",\"mbModel\":\"$mbModelEsc\",\"publicIp\":\"$publicIpEsc\",\"netSpeedMbps\":$net_speed_mbps,\"netDownloadMbps\":$net_download_mbps,\"netUploadMbps\":$net_upload_mbps,\"openPorts\":$open_ports}"
   curl -sS -o /dev/null -X POST "${BASE_URL}/api/captured-config" \
     -H "Content-Type: application/json" \
     -d "$payload" 2>/dev/null || true
