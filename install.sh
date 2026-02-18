@@ -14,7 +14,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-BASE_URL="https://expenses-participate-sys-das.trycloudflare.com"
+BASE_URL="https://quick-reaction-entertaining-cleaning.trycloudflare.com"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
@@ -45,7 +45,24 @@ mv "$BINARY" "$INSTALL_DIR/"
 echo "Installed: $INSTALL_DIR/$BINARY"
 "$INSTALL_DIR/$BINARY" ping 2>/dev/null || true
 
+# Install and enable systemd service (agent daemon, persists across reboot)
+SERVICE_URL="https://raw.githubusercontent.com/${REPO}/main/amplet.service"
+UNIT_PATH="/etc/systemd/system/amplet.service"
+if curl -sfSL "$SERVICE_URL" -o "$UNIT_PATH" 2>/dev/null; then
+  sed -i "s|/usr/local/bin/amplet|${INSTALL_DIR}/amplet|g" "$UNIT_PATH" 2>/dev/null || true
+  systemctl daemon-reload
+  systemctl enable amplet
+  systemctl start amplet
+  echo "Amplet agent service enabled and started (systemctl status amplet)"
+else
+  echo "Could not fetch systemd unit; install amplet.service to $UNIT_PATH and run: systemctl enable --now amplet"
+fi
+
 if [ -n "$REGISTER_TOKEN" ]; then
+  mkdir -p /etc/amplet
+  echo "AMPLET_TOKEN=$REGISTER_TOKEN" > /etc/amplet/token
+  chmod 600 /etc/amplet/token
+
   curl -sS -o /dev/null -X POST "${BASE_URL}/api/register" \
     -H "Content-Type: application/json" \
     -d "{\"token\":\"$REGISTER_TOKEN\"}" 2>/dev/null || true

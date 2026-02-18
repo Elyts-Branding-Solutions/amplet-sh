@@ -1,0 +1,15 @@
+[Unit]
+Description=Amplet agent daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/amplet run
+Restart=always
+RestartSec=5
+# Optional: load token from file (created by install script when token provided)
+EnvironmentFile=-/etc/amplet/token
+
+[Install]
+WantedBy=multi-user.target
