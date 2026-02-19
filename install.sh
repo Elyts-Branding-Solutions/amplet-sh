@@ -14,7 +14,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-BASE_URL="https://quick-reaction-entertaining-cleaning.trycloudflare.com"
+BASE_URL="https://cosmetic-info-that-pdf.trycloudflare.com"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
@@ -101,6 +101,9 @@ if [ -n "$REGISTER_TOKEN" ]; then
   gpuManufacturer="not installed"
   gpuDriverVersion="not installed"
   cudaVersion="not installed"
+  gpu_temp="0"
+  gpu_tflops_each="0"
+  gpu_tflops_total="0"
   if command -v nvidia-smi >/dev/null 2>&1; then
     gpuCount=$(nvidia-smi -L 2>/dev/null | wc -l | tr -d ' ')
     [ -z "$gpuCount" ] && gpuCount="0"
@@ -125,6 +128,67 @@ if [ -n "$REGISTER_TOKEN" ]; then
       Intel*) gpuManufacturer="Intel" ;;
       *) gpuManufacturer="NVIDIA" ;;
     esac
+    # GPU temperature (first GPU, Celsius)
+    gpu_temp=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
+    [ -z "$gpu_temp" ] && gpu_temp="0"
+    # Boost clock (MHz) for TFLOPS calculation
+    gpu_boost_mhz=$(nvidia-smi --query-gpu=clocks.max.graphics --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
+    [ -z "$gpu_boost_mhz" ] && gpu_boost_mhz="0"
+    # CUDA core count lookup by GPU model (nvidia-smi does not expose this directly)
+    cuda_cores="0"
+    case "$gpuName" in
+      *"H100 SXM"*) cuda_cores="16896" ;;
+      *"H100"*)     cuda_cores="16896" ;;
+      *"L40S"*)     cuda_cores="18176" ;;
+      *"L40"*)      cuda_cores="18176" ;;
+      *"L4"*)       cuda_cores="7680" ;;
+      *"A100"*)     cuda_cores="6912" ;;
+      *"A6000"*)    cuda_cores="10752" ;;
+      *"A5000"*)    cuda_cores="8192" ;;
+      *"A4000"*)    cuda_cores="6144" ;;
+      *"A2000"*)    cuda_cores="3328" ;;
+      *"V100"*)     cuda_cores="5120" ;;
+      *"T4"*)       cuda_cores="2560" ;;
+      *"P100"*)     cuda_cores="3584" ;;
+      *"RTX 4090"*)          cuda_cores="16384" ;;
+      *"RTX 4080 Super"*)    cuda_cores="10240" ;;
+      *"RTX 4080"*)          cuda_cores="9728" ;;
+      *"RTX 4070 Ti Super"*) cuda_cores="8448" ;;
+      *"RTX 4070 Ti"*)       cuda_cores="7680" ;;
+      *"RTX 4070 Super"*)    cuda_cores="7168" ;;
+      *"RTX 4070"*)          cuda_cores="5888" ;;
+      *"RTX 4060 Ti"*)       cuda_cores="4352" ;;
+      *"RTX 4060"*)          cuda_cores="3072" ;;
+      *"RTX 3090 Ti"*)       cuda_cores="10752" ;;
+      *"RTX 3090"*)          cuda_cores="10496" ;;
+      *"RTX 3080 Ti"*)       cuda_cores="10240" ;;
+      *"RTX 3080 12"*)       cuda_cores="8960" ;;
+      *"RTX 3080"*)          cuda_cores="8704" ;;
+      *"RTX 3070 Ti"*)       cuda_cores="6144" ;;
+      *"RTX 3070"*)          cuda_cores="5888" ;;
+      *"RTX 3060 Ti"*)       cuda_cores="4864" ;;
+      *"RTX 3060"*)          cuda_cores="3584" ;;
+      *"RTX 2080 Ti"*)       cuda_cores="4352" ;;
+      *"RTX 2080 Super"*)    cuda_cores="3072" ;;
+      *"RTX 2080"*)          cuda_cores="2944" ;;
+      *"RTX 2070 Super"*)    cuda_cores="2560" ;;
+      *"RTX 2070"*)          cuda_cores="2304" ;;
+      *"RTX 2060 Super"*)    cuda_cores="2176" ;;
+      *"RTX 2060"*)          cuda_cores="1920" ;;
+      *"GTX 1080 Ti"*)       cuda_cores="3584" ;;
+      *"GTX 1080"*)          cuda_cores="2560" ;;
+      *"GTX 1070 Ti"*)       cuda_cores="2432" ;;
+      *"GTX 1070"*)          cuda_cores="1920" ;;
+      *"GTX 1060"*)          cuda_cores="1280" ;;
+    esac
+    # Per-GPU TFLOPS (FP32): cores × 2 × boost_GHz
+    gpu_tflops_each="0"
+    [ "$cuda_cores" != "0" ] && [ "$gpu_boost_mhz" != "0" ] && \
+      gpu_tflops_each=$(echo "$cuda_cores $gpu_boost_mhz" | awk '{printf "%.1f", $1 * 2 * $2 / 1000000}')
+    # Total TFLOPS across all GPUs
+    gpu_tflops_total="0"
+    [ "$gpu_tflops_each" != "0" ] && [ "$gpuCount" != "0" ] && \
+      gpu_tflops_total=$(echo "$gpu_tflops_each $gpuCount" | awk '{printf "%.1f", $1 * $2}')
   fi
 
   # Storage model and vendor (primary disk)
@@ -192,7 +256,7 @@ if [ -n "$REGISTER_TOKEN" ]; then
   mbManufacturerEsc=$(_json_esc "$mb_manufacturer")
   mbModelEsc=$(_json_esc "$mb_model")
   publicIpEsc=$(_json_esc "$public_ip")
-  payload="{\"token\":\"$REGISTER_TOKEN\",\"cpuType\":\"$cpuTypeEsc\",\"core\":$core,\"threads\":$threads,\"ram\":\"$ramEsc\",\"os\":\"$osEsc\",\"storage\":\"$storageEsc\",\"storageTotalGB\":$storage_total_gb,\"storageUsedGB\":$storage_used_gb,\"storageModel\":\"$storageModelEsc\",\"storageVendor\":\"$storageVendorEsc\",\"gpuVram\":\"$gpuVramEsc\",\"gpuCount\":$gpuCount,\"gpuName\":\"$gpuNameEsc\",\"gpuManufacturer\":\"$gpuManufacturerEsc\",\"gpuDriverVersion\":\"$gpuDriverVersionEsc\",\"cudaVersion\":\"$cudaVersionEsc\",\"mbManufacturer\":\"$mbManufacturerEsc\",\"mbModel\":\"$mbModelEsc\",\"publicIp\":\"$publicIpEsc\",\"netSpeedMbps\":$net_speed_mbps,\"netDownloadMbps\":$net_download_mbps,\"netUploadMbps\":$net_upload_mbps,\"openPorts\":$open_ports}"
+  payload="{\"token\":\"$REGISTER_TOKEN\",\"cpuType\":\"$cpuTypeEsc\",\"core\":$core,\"threads\":$threads,\"ram\":\"$ramEsc\",\"os\":\"$osEsc\",\"storage\":\"$storageEsc\",\"storageTotalGB\":$storage_total_gb,\"storageUsedGB\":$storage_used_gb,\"storageModel\":\"$storageModelEsc\",\"storageVendor\":\"$storageVendorEsc\",\"gpuVram\":\"$gpuVramEsc\",\"gpuCount\":$gpuCount,\"gpuName\":\"$gpuNameEsc\",\"gpuManufacturer\":\"$gpuManufacturerEsc\",\"gpuDriverVersion\":\"$gpuDriverVersionEsc\",\"cudaVersion\":\"$cudaVersionEsc\",\"gpuTempC\":$gpu_temp,\"gpuTflopsEach\":$gpu_tflops_each,\"gpuTflopsTotal\":$gpu_tflops_total,\"mbManufacturer\":\"$mbManufacturerEsc\",\"mbModel\":\"$mbModelEsc\",\"publicIp\":\"$publicIpEsc\",\"netSpeedMbps\":$net_speed_mbps,\"netDownloadMbps\":$net_download_mbps,\"netUploadMbps\":$net_upload_mbps,\"openPorts\":$open_ports}"
   curl -sS -o /dev/null -X POST "${BASE_URL}/api/captured-config" \
     -H "Content-Type: application/json" \
     -d "$payload" 2>/dev/null || true
