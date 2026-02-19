@@ -14,8 +14,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-BASE_URL="https://cosmetic-info-that-pdf.trycloudflare.com"   # Next.js server (register + config)
-PULSE_URL="https://fri-organ-shaped-sharing.trycloudflare.com"  # Go WebSocket server (real-time pulse)
+PULSE_URL="https://fri-organ-shaped-sharing.trycloudflare.com"  # Go WebSocket server (register + config + real-time pulse)
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
@@ -68,11 +67,7 @@ if [ -n "$REGISTER_TOKEN" ]; then
   printf "AMPLET_SERVER_URL=%s\n" "$PULSE_URL" > /etc/amplet/config
   chmod 644 /etc/amplet/config
 
-  curl -sS -o /dev/null -X POST "${BASE_URL}/api/register" \
-    -H "Content-Type: application/json" \
-    -d "{\"token\":\"$REGISTER_TOKEN\"}" 2>/dev/null || true
-
-  # Capture hardware config (Linux) and send to API
+  # Capture hardware config (Linux) — written to disk, sent by agent on first WebSocket connect
   _trim() { echo "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
   _json_esc() { echo "$1" | sed 's/\\/\\\\/g;s/"/\\"/g'; }
   cpuType=$(_trim "$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | sed 's/.*: *//')")
@@ -262,7 +257,8 @@ if [ -n "$REGISTER_TOKEN" ]; then
   mbModelEsc=$(_json_esc "$mb_model")
   publicIpEsc=$(_json_esc "$public_ip")
   payload="{\"token\":\"$REGISTER_TOKEN\",\"cpuType\":\"$cpuTypeEsc\",\"core\":$core,\"threads\":$threads,\"ram\":\"$ramEsc\",\"os\":\"$osEsc\",\"storage\":\"$storageEsc\",\"storageTotalGB\":$storage_total_gb,\"storageUsedGB\":$storage_used_gb,\"storageModel\":\"$storageModelEsc\",\"storageVendor\":\"$storageVendorEsc\",\"gpuVram\":\"$gpuVramEsc\",\"gpuCount\":$gpuCount,\"gpuName\":\"$gpuNameEsc\",\"gpuManufacturer\":\"$gpuManufacturerEsc\",\"gpuDriverVersion\":\"$gpuDriverVersionEsc\",\"cudaVersion\":\"$cudaVersionEsc\",\"gpuTempC\":$gpu_temp,\"gpuTflopsEach\":$gpu_tflops_each,\"gpuTflopsTotal\":$gpu_tflops_total,\"mbManufacturer\":\"$mbManufacturerEsc\",\"mbModel\":\"$mbModelEsc\",\"publicIp\":\"$publicIpEsc\",\"netSpeedMbps\":$net_speed_mbps,\"netDownloadMbps\":$net_download_mbps,\"netUploadMbps\":$net_upload_mbps,\"openPorts\":$open_ports}"
-  curl -sS -o /dev/null -X POST "${BASE_URL}/api/captured-config" \
-    -H "Content-Type: application/json" \
-    -d "$payload" 2>/dev/null || true
+  # Write hardware config for the agent to send on first WebSocket connect
+  echo "$payload" > /etc/amplet/hwinfo.json
+  chmod 644 /etc/amplet/hwinfo.json
+  echo "Hardware config saved."
 fi

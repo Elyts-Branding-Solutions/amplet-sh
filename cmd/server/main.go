@@ -4,24 +4,28 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
-	db, err := openDB()
+	godotenv.Load() // load .env if present; silently ignored if missing
+
+	pool, err := openDB()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "db connect: %v\n", err)
 		os.Exit(1)
 	}
-	defer db.Close()
+	defer pool.Close()
 
-	if err := migrateDB(db); err != nil {
+	if err := migrateDB(pool); err != nil {
 		fmt.Fprintf(os.Stderr, "db migrate: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("database ready")
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws/agent", makeWSHandler(db))
+	mux.HandleFunc("/ws/agent", makeWSHandler(pool))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))

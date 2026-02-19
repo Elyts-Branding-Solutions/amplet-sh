@@ -101,6 +101,17 @@ func runSession(ctx context.Context, rawURL, token string) error {
 	defer conn.Close()
 	fmt.Println("connected to server")
 
+	// Send hardware config once on connect (written by install.sh to /etc/amplet/hwinfo.json)
+	if raw, err := os.ReadFile("/etc/amplet/hwinfo.json"); err == nil {
+		var m map[string]interface{}
+		if json.Unmarshal(raw, &m) == nil {
+			m["type"] = "config"
+			if data, err := json.Marshal(m); err == nil {
+				conn.WriteMessage(websocket.TextMessage, data)
+			}
+		}
+	}
+
 	ticker := time.NewTicker(statsInterval)
 	defer ticker.Stop()
 

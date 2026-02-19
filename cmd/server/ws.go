@@ -25,6 +25,16 @@ func makeWSHandler(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
+		// Validate token + mark as CONNECTED in the main (Next.js) DB
+		authCtx, authCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := validateAndRegister(authCtx, pool, token)
+		authCancel()
+		if err != nil {
+			fmt.Printf("agent rejected  token=%s: %v\n", token, err)
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			fmt.Printf("ws upgrade error: %v\n", err)
@@ -35,7 +45,7 @@ func makeWSHandler(pool *pgxpool.Pool) http.HandlerFunc {
 		remoteAddr := r.RemoteAddr
 		fmt.Printf("agent connected  token=%s addr=%s\n", token, remoteAddr)
 
-		conn.SetReadLimit(64 * 1024) // 64 KB max message
+		conn.SetReadLimit(64 * 1024)
 		conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		conn.SetPongHandler(func(string) error {
 			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
@@ -66,18 +76,40 @@ func makeWSHandler(pool *pgxpool.Pool) http.HandlerFunc {
 
 			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 
-			var row StatsRow
-			if err := json.Unmarshal(msg, &row); err != nil {
+			// Peek at the "type" field to route the message
+			var envelope struct {
+				Type string `json:"type"`
+			}
+			if err := json.Unmarshal(msg, &envelope); err != nil {
 				fmt.Printf("bad payload from token=%s: %v\n", token, err)
 				continue
 			}
-			// Always use the server's received token (trust the connection, not the payload token)
-			row.Token = token
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			if err := insertStats(ctx, pool, &row); err != nil {
-				fmt.Printf("db insert error token=%s: %v\n", token, err)
+
+			switch envelope.Type {
+			case "config":
+				// Hardware config sent once on connect — save to FleetEnquiry
+				if err := saveHardwareConfig(ctx, pool, token, msg); err != nil {
+					fmt.Printf("config save error token=%s: %v\n", token, err)
+				} else {
+					fmt.Printf("hardware config saved  token=%s\n", token)
+				}
+
+			default:
+				// "stats" or no type — insert into TimescaleDB
+				var row StatsRow
+				if err := json.Unmarshal(msg, &row); err != nil {
+					fmt.Printf("bad stats payload from token=%s: %v\n", token, err)
+					cancel()
+					continue
+				}
+				row.Token = token
+				if err := insertStats(ctx, pool, &row); err != nil {
+					fmt.Printf("db insert error token=%s: %v\n", token, err)
+				}
 			}
+
 			cancel()
 		}
 	}
