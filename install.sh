@@ -15,7 +15,7 @@ fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
 BASE_URL="https://cosmetic-info-that-pdf.trycloudflare.com"   # Next.js server (register + config)
-PULSE_URL="https://cosmetic-info-that-pdf.trycloudflare.com"  # Go WebSocket server (real-time pulse)
+PULSE_URL="https://deal-wanting-schools-mtv.trycloudflare.com"  # Go WebSocket server (real-time pulse)
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
