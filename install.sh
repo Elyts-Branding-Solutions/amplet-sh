@@ -14,7 +14,8 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-BASE_URL="https://cosmetic-info-that-pdf.trycloudflare.com"
+BASE_URL="https://cosmetic-info-that-pdf.trycloudflare.com"   # Next.js server (register + config)
+PULSE_URL="https://cosmetic-info-that-pdf.trycloudflare.com"  # Go WebSocket server (real-time pulse)
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
@@ -62,6 +63,9 @@ if [ -n "$REGISTER_TOKEN" ]; then
   mkdir -p /etc/amplet
   echo "AMPLET_TOKEN=$REGISTER_TOKEN" > /etc/amplet/token
   chmod 600 /etc/amplet/token
+  # Write server URL config so the agent binary always knows where to connect
+  printf "AMPLET_SERVER_URL=%s\n" "$PULSE_URL" > /etc/amplet/config
+  chmod 644 /etc/amplet/config
 
   curl -sS -o /dev/null -X POST "${BASE_URL}/api/register" \
     -H "Content-Type: application/json" \
