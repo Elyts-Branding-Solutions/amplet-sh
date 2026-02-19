@@ -15,7 +15,7 @@ func main() {
 
 	switch os.Args[1] {
 	case "ping":
-		fmt.Println("pong...")
+		fmt.Println("pong..!")
 	case "run":
 		runAgent()
 	default:

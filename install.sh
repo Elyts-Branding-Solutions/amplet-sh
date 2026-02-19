@@ -54,6 +54,7 @@ if curl -sfSL "$SERVICE_URL" -o "$UNIT_PATH" 2>/dev/null; then
   systemctl daemon-reload
   systemctl enable amplet
   systemctl start amplet
+  echo "Pulse URL: $PULSE_URL" 
   echo "Amplet agent service enabled and started (systemctl status amplet)"
 else
   echo "Could not fetch systemd unit; install amplet.service to $UNIT_PATH and run: systemctl enable --now amplet"
