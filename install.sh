@@ -1,12 +1,8 @@
 #!/bin/sh
-# Install amplet from GitHub Releases (Linux only).
-# Usage (no token): curl -fsSL https://raw.githubusercontent.com/Elyts-Branding-Solutions/amplet-sh/main/install.sh | sh
-# Usage (with token): curl -fsSL https://raw.githubusercontent.com/Elyts-Branding-Solutions/amplet-sh/main/install.sh | sh -s YOUR_TOKEN
 
 set -e
 INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/Elyts-Branding-Solutions/amplet-sh/main/install.sh"
 
-# Re-exec with sudo for seamless run (one prompt at start)
 if [ "$(id -u)" -ne 0 ]; then
   echo "Requiring sudo for install and hardware detection."
   exec sudo sh -c 'curl -fsSL "'"$INSTALL_SCRIPT_URL"'" | sh -s "'"${1:-}"'"'
@@ -14,12 +10,11 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-PULSE_URL="https://dressed-grande-tablet-coupons.trycloudflare.com"  # Go WebSocket server (register + config + real-time pulse)
+PULSE_URL="https://debian-window-setting-mask.trycloudflare.com"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
 
-# Linux only: detect arch for release asset
 ARCH=$(uname -m)
 case "$ARCH" in
   x86_64) ARCH="amd64" ;;
@@ -45,29 +40,20 @@ mv "$BINARY" "$INSTALL_DIR/"
 echo "Installed: $INSTALL_DIR/$BINARY"
 "$INSTALL_DIR/$BINARY" ping 2>/dev/null || true
 
-# Install and enable systemd service (agent daemon, persists across reboot)
-SERVICE_URL="https://raw.githubusercontent.com/${REPO}/main/amplet.service"
 UNIT_PATH="/etc/systemd/system/amplet.service"
-if curl -sfSL "$SERVICE_URL" -o "$UNIT_PATH" 2>/dev/null; then
-  sed -i "s|/usr/local/bin/amplet|${INSTALL_DIR}/amplet|g" "$UNIT_PATH" 2>/dev/null || true
-  systemctl daemon-reload
-  systemctl enable amplet
-  systemctl start amplet
-  echo "Pulse URL: $PULSE_URL" 
-  echo "Amplet agent service enabled and started (systemctl status amplet)"
-else
-  echo "Could not fetch systemd unit; install amplet.service to $UNIT_PATH and run: systemctl enable --now amplet"
-fi
+printf '[Unit]\nDescription=Amplet agent daemon\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=%s/amplet run\nRestart=always\nRestartSec=5\nEnvironmentFile=-/etc/amplet/token\n\n[Install]\nWantedBy=multi-user.target\n' "$INSTALL_DIR" > "$UNIT_PATH"
+systemctl daemon-reload
+systemctl enable amplet
+systemctl start amplet
+echo "Amplet agent service enabled and started (systemctl status amplet)"
 
 if [ -n "$REGISTER_TOKEN" ]; then
   mkdir -p /etc/amplet
   echo "AMPLET_TOKEN=$REGISTER_TOKEN" > /etc/amplet/token
   chmod 600 /etc/amplet/token
-  # Write server URL config so the agent binary always knows where to connect
   printf "AMPLET_SERVER_URL=%s\n" "$PULSE_URL" > /etc/amplet/config
   chmod 644 /etc/amplet/config
 
-  # Capture hardware config (Linux) — written to disk, sent by agent on first WebSocket connect
   _trim() { echo "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
   _json_esc() { echo "$1" | sed 's/\\/\\\\/g;s/"/\\"/g'; }
   cpuType=$(_trim "$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | sed 's/.*: *//')")
@@ -94,7 +80,6 @@ if [ -n "$REGISTER_TOKEN" ]; then
   [ -z "$storage_total_gb" ] && storage_total_gb="0"
   [ -z "$storage_used_gb" ] && storage_used_gb="0"
   storage="${storage_total_gb} GB"
-  # GPU details
   gpuVram="N/A"
   gpuCount="0"
   gpuName="not installed"
@@ -116,25 +101,19 @@ if [ -n "$REGISTER_TOKEN" ]; then
     [ -z "$gpuName" ] && gpuName="Unknown"
     gpuDriverVersion=$(_trim "$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1)")
     [ -z "$gpuDriverVersion" ] && gpuDriverVersion="Unknown"
-    # CUDA version from nvidia-smi header line
     cudaVersion=$(_trim "$(nvidia-smi 2>/dev/null | grep -o 'CUDA Version: [0-9.]*' | head -1 | sed 's/CUDA Version: //')")
-    # Fallback: nvcc
     [ -z "$cudaVersion" ] && cudaVersion=$(_trim "$(nvcc --version 2>/dev/null | grep -o 'release [0-9.]*' | head -1 | sed 's/release //')")
     [ -z "$cudaVersion" ] && cudaVersion="not installed"
-    # Manufacturer from GPU name prefix
     case "$gpuName" in
       NVIDIA*|GeForce*|Quadro*|Tesla*) gpuManufacturer="NVIDIA" ;;
       AMD*|Radeon*) gpuManufacturer="AMD" ;;
       Intel*) gpuManufacturer="Intel" ;;
       *) gpuManufacturer="NVIDIA" ;;
     esac
-    # GPU temperature (first GPU, Celsius)
     gpu_temp=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
     [ -z "$gpu_temp" ] && gpu_temp="0"
-    # Boost clock (MHz) for TFLOPS calculation
     gpu_boost_mhz=$(nvidia-smi --query-gpu=clocks.max.graphics --format=csv,noheader,nounits 2>/dev/null | head -1 | tr -d ' ')
     [ -z "$gpu_boost_mhz" ] && gpu_boost_mhz="0"
-    # CUDA core count lookup by GPU model (nvidia-smi does not expose this directly)
     cuda_cores="0"
     case "$gpuName" in
       *"H100 SXM"*) cuda_cores="16896" ;;
@@ -181,17 +160,14 @@ if [ -n "$REGISTER_TOKEN" ]; then
       *"GTX 1070"*)          cuda_cores="1920" ;;
       *"GTX 1060"*)          cuda_cores="1280" ;;
     esac
-    # Per-GPU TFLOPS (FP32): cores × 2 × boost_GHz
     gpu_tflops_each="0"
     [ "$cuda_cores" != "0" ] && [ "$gpu_boost_mhz" != "0" ] && \
       gpu_tflops_each=$(echo "$cuda_cores $gpu_boost_mhz" | awk '{printf "%.1f", $1 * 2 * $2 / 1000000}')
-    # Total TFLOPS across all GPUs
     gpu_tflops_total="0"
     [ "$gpu_tflops_each" != "0" ] && [ "$gpuCount" != "0" ] && \
       gpu_tflops_total=$(echo "$gpu_tflops_each $gpuCount" | awk '{printf "%.1f", $1 * $2}')
   fi
 
-  # Storage model and vendor (primary disk)
   storage_model=$(_trim "$(lsblk -d -o MODEL 2>/dev/null | awk 'NR>1 && $0!="" {print; exit}')")
   [ -z "$storage_model" ] && storage_model="Unknown"
   storage_vendor=$(_trim "$(lsblk -d -o VENDOR 2>/dev/null | awk 'NR>1 && $0!="" {print; exit}')")
@@ -202,7 +178,6 @@ if [ -n "$REGISTER_TOKEN" ]; then
   fi
   [ -z "$storage_vendor" ] && storage_vendor="Unknown"
 
-  # Motherboard manufacturer and model
   mb_manufacturer="Unknown"
   mb_model="Unknown"
   if command -v dmidecode >/dev/null 2>&1; then
@@ -212,12 +187,10 @@ if [ -n "$REGISTER_TOKEN" ]; then
   [ -z "$mb_manufacturer" ] && mb_manufacturer="Unknown"
   [ -z "$mb_model" ] && mb_model="Unknown"
 
-  # Network: public IP
   public_ip=$(curl -s --connect-timeout 5 ifconfig.me 2>/dev/null)
   [ -z "$public_ip" ] && public_ip=$(curl -s --connect-timeout 5 api.ipify.org 2>/dev/null)
   [ -z "$public_ip" ] && public_ip="Unknown"
 
-  # Network: primary interface link speed (Mbps)
   net_iface=$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')
   net_speed_mbps="0"
   if [ -n "$net_iface" ] && [ -f "/sys/class/net/$net_iface/speed" ]; then
@@ -225,7 +198,6 @@ if [ -n "$REGISTER_TOKEN" ]; then
     [ "$net_speed_mbps" -lt 0 ] 2>/dev/null && net_speed_mbps="0"
   fi
 
-  # Network: measured download and upload speed (Mbps) via Cloudflare
   echo "Measuring network speed..."
   dl_bps=$(curl -o /dev/null -s -w "%{speed_download}" --connect-timeout 10 --max-time 15 \
     "https://speed.cloudflare.com/__down?bytes=10000000" 2>/dev/null || echo "0")
@@ -239,7 +211,6 @@ if [ -n "$REGISTER_TOKEN" ]; then
   net_upload_mbps=$(echo "$ul_bps" | awk '{printf "%.1f", $1*8/1000000}')
   [ -z "$net_upload_mbps" ] && net_upload_mbps="0"
 
-  # Network: number of listening ports
   open_ports=$(ss -tuln 2>/dev/null | grep -c LISTEN || netstat -tuln 2>/dev/null | grep -c LISTEN || echo "0")
 
   cpuTypeEsc=$(_json_esc "$cpuType")
@@ -257,7 +228,6 @@ if [ -n "$REGISTER_TOKEN" ]; then
   mbModelEsc=$(_json_esc "$mb_model")
   publicIpEsc=$(_json_esc "$public_ip")
   payload="{\"token\":\"$REGISTER_TOKEN\",\"cpuType\":\"$cpuTypeEsc\",\"core\":$core,\"threads\":$threads,\"ram\":\"$ramEsc\",\"os\":\"$osEsc\",\"storage\":\"$storageEsc\",\"storageTotalGB\":$storage_total_gb,\"storageUsedGB\":$storage_used_gb,\"storageModel\":\"$storageModelEsc\",\"storageVendor\":\"$storageVendorEsc\",\"gpuVram\":\"$gpuVramEsc\",\"gpuCount\":$gpuCount,\"gpuName\":\"$gpuNameEsc\",\"gpuManufacturer\":\"$gpuManufacturerEsc\",\"gpuDriverVersion\":\"$gpuDriverVersionEsc\",\"cudaVersion\":\"$cudaVersionEsc\",\"gpuTempC\":$gpu_temp,\"gpuTflopsEach\":$gpu_tflops_each,\"gpuTflopsTotal\":$gpu_tflops_total,\"mbManufacturer\":\"$mbManufacturerEsc\",\"mbModel\":\"$mbModelEsc\",\"publicIp\":\"$publicIpEsc\",\"netSpeedMbps\":$net_speed_mbps,\"netDownloadMbps\":$net_download_mbps,\"netUploadMbps\":$net_upload_mbps,\"openPorts\":$open_ports}"
-  # Write hardware config for the agent to send on first WebSocket connect
   echo "$payload" > /etc/amplet/hwinfo.json
   chmod 644 /etc/amplet/hwinfo.json
   echo "Hardware config saved."
