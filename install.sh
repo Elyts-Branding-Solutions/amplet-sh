@@ -44,8 +44,6 @@ UNIT_PATH="/etc/systemd/system/amplet.service"
 printf '[Unit]\nDescription=Amplet agent daemon\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=%s/amplet run\nRestart=always\nRestartSec=5\nEnvironmentFile=-/etc/amplet/token\n\n[Install]\nWantedBy=multi-user.target\n' "$INSTALL_DIR" > "$UNIT_PATH"
 systemctl daemon-reload
 systemctl enable amplet
-systemctl start amplet
-echo "Amplet agent service enabled and started (systemctl status amplet)"
 
 if [ -n "$REGISTER_TOKEN" ]; then
   mkdir -p /etc/amplet
@@ -232,3 +230,6 @@ if [ -n "$REGISTER_TOKEN" ]; then
   chmod 644 /etc/amplet/hwinfo.json
   echo "Hardware config saved."
 fi
+
+systemctl start amplet
+echo "Amplet agent service enabled and started (systemctl status amplet)"
