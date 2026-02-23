@@ -10,7 +10,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-PULSE_URL="https://quarterly-monitoring-wheel-admit.trycloudflare.com"
+PULSE_URL="https://designer-replica-makes-exist.trycloudflare.com"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
@@ -51,6 +51,8 @@ if [ -n "$REGISTER_TOKEN" ]; then
   chmod 600 /etc/amplet/token
   printf "AMPLET_SERVER_URL=%s\n" "$PULSE_URL" > /etc/amplet/config
   chmod 644 /etc/amplet/config
+
+  echo "Pulse URL: $PULSE_URL"
 
   _trim() { echo "$1" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'; }
   _json_esc() { echo "$1" | sed 's/\\/\\\\/g;s/"/\\"/g'; }
