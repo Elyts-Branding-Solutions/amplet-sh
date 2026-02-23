@@ -10,7 +10,7 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-PULSE_URL="https://debian-window-setting-mask.trycloudflare.com"
+PULSE_URL="https://quarterly-monitoring-wheel-admit.trycloudflare.com"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
