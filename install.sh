@@ -235,5 +235,5 @@ if [ -n "$REGISTER_TOKEN" ]; then
   echo "Hardware config saved."
 fi
 
-systemctl start amplet
+systemctl restart amplet
 echo "Amplet agent service enabled and started (systemctl status amplet)"
