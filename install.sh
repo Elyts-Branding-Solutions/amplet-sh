@@ -26,19 +26,24 @@ esac
 ASSET="amplet-linux-${ARCH}"
 [ "$ARCH" != "amd64" ] && ASSET_ALT="amplet-linux-amd64"
 
+# Download to a temp dir so install works even when run from INSTALL_DIR (e.g. cd /usr/local/bin)
+TMPDIR=$(mktemp -d 2>/dev/null || echo "/tmp/amplet-install.$$")
+mkdir -p "$TMPDIR"
+trap 'rm -rf "$TMPDIR"' EXIT 2>/dev/null || true
+
 echo "Installing amplet to $INSTALL_DIR"
 URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
-if ! curl -sfSL -o "$BINARY" "$URL" 2>/dev/null && [ -n "${ASSET_ALT:-}" ]; then
+if ! curl -sfSL -o "$TMPDIR/$BINARY" "$URL" 2>/dev/null && [ -n "${ASSET_ALT:-}" ]; then
   URL="https://github.com/${REPO}/releases/latest/download/${ASSET_ALT}"
-  curl -sfSL -o "$BINARY" "$URL"
+  curl -sfSL -o "$TMPDIR/$BINARY" "$URL"
 fi
-if [ ! -f "$BINARY" ] || [ ! -s "$BINARY" ]; then
+if [ ! -f "$TMPDIR/$BINARY" ] || [ ! -s "$TMPDIR/$BINARY" ]; then
   echo "No release binary for linux/$ARCH."
   echo "Install from source: git clone https://github.com/${REPO}.git && cd amplet-sh && make build && sudo make install"
   exit 1
 fi
-chmod +x "$BINARY"
-mv "$BINARY" "$INSTALL_DIR/"
+chmod +x "$TMPDIR/$BINARY"
+mv "$TMPDIR/$BINARY" "$INSTALL_DIR/"
 echo "Installed: $INSTALL_DIR/$BINARY"
 "$INSTALL_DIR/$BINARY" ping 2>/dev/null || true
 
