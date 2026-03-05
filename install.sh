@@ -5,16 +5,13 @@ INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/Elyts-Branding-Solutions/a
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Requiring sudo for install and hardware detection."
-  exec sudo sh -c 'curl -fsSL "'"$INSTALL_SCRIPT_URL"'" | sh -s "'"${1:-}"'"'
+  exec sudo sh -c 'curl -fsSL "'"$INSTALL_SCRIPT_URL"'" | sh -s -- "'"${1:-}"'" "'"${2:-}"'"'
   exit 1
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-# Pulse URL: pass as second argument (e.g. your ngrok URL) or set PULSE_URL env when invoking the script.
-# Example: curl -fsSL ... | sh -s -- TOKEN https://your-id.ngrok-free.app
 PULSE_URL="${PULSE_URL:-}"
 [ -n "${2:-}" ] && PULSE_URL="$2"
-# Default if nothing provided (e.g. local dev)
 [ -z "$PULSE_URL" ] && PULSE_URL="http://localhost:8080"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
