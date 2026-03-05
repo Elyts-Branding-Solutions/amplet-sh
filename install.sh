@@ -10,7 +10,12 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 REPO="Elyts-Branding-Solutions/amplet-sh"
-PULSE_URL="https://designer-replica-makes-exist.trycloudflare.com"
+# Pulse URL: pass as second argument (e.g. your ngrok URL) or set PULSE_URL env when invoking the script.
+# Example: curl -fsSL ... | sh -s -- TOKEN https://your-id.ngrok-free.app
+PULSE_URL="${PULSE_URL:-}"
+[ -n "${2:-}" ] && PULSE_URL="$2"
+# Default if nothing provided (e.g. local dev)
+[ -z "$PULSE_URL" ] && PULSE_URL="http://localhost:8080"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 BINARY="amplet"
 REGISTER_TOKEN="${1:-}"
