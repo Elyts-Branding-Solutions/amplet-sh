@@ -48,7 +48,7 @@ echo "Installed: $INSTALL_DIR/$BINARY"
 "$INSTALL_DIR/$BINARY" ping 2>/dev/null || true
 
 UNIT_PATH="/etc/systemd/system/amplet.service"
-printf '[Unit]\nDescription=Amplet agent daemon\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=%s/amplet run\nRestart=always\nRestartSec=5\nEnvironmentFile=-/etc/amplet/token\n\n[Install]\nWantedBy=multi-user.target\n' "$INSTALL_DIR" > "$UNIT_PATH"
+printf '[Unit]\nDescription=Luma agent daemon\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=%s/amplet run\nRestart=always\nRestartSec=5\nEnvironmentFile=-/etc/amplet/token\n\n[Install]\nWantedBy=multi-user.target\n' "$INSTALL_DIR" > "$UNIT_PATH"
 systemctl daemon-reload
 systemctl enable amplet
 
@@ -241,4 +241,4 @@ if [ -n "$REGISTER_TOKEN" ]; then
 fi
 
 systemctl restart amplet
-echo "Amplet agent service enabled and started (systemctl status amplet)"
+echo "Luma agent service enabled and started (systemctl status amplet)"
